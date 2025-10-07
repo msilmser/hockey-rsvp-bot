@@ -222,7 +222,7 @@ hockey-rsvp-bot/
 
 ## Automated Deployment
 
-This repository includes GitHub Actions for automatic deployment to your server.
+This repository includes GitHub Actions for automatic deployment to your server using a self-hosted runner.
 
 ### Setup Instructions
 

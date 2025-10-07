@@ -7,40 +7,29 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Deploy to server
-      uses: appleboy/ssh-action@v1.1.0
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USERNAME }}
-        key: ${{ secrets.SSH_KEY }}
-        script: |
-          # Navigate to project directory
-          cd ${{ secrets.PROJECT_PATH || '/home/silmser/home_repos/hockey-rsvp-bot' }}
-          
-          # Pull latest changes
-          git pull origin main
-          
-          # Stop current container
-          podman-compose down || true
-          
-          # Rebuild container with latest code
-          podman build -t hockey-rsvp-bot .
-          
-          # Start container
-          podman-compose up -d
-          
-          # Check if container started successfully
-          sleep 5
-          if podman ps | grep -q hockey-rsvp-bot; then
-            echo "✅ Deployment successful - Bot is running"
-          else
-            echo "❌ Deployment failed - Container not running"
-            podman logs hockey-rsvp-bot
-            exit 1
-          fi
+    - name: Deploy bot
+      run: |
+        # Stop current container
+        podman-compose down || true
+        
+        # Rebuild container with latest code
+        podman build -t hockey-rsvp-bot .
+        
+        # Start container
+        podman-compose up -d
+        
+        # Check if container started successfully
+        sleep 5
+        if podman ps | grep -q hockey-rsvp-bot; then
+          echo "✅ Deployment successful - Bot is running"
+        else
+          echo "❌ Deployment failed - Container not running"
+          podman logs hockey-rsvp-bot
+          exit 1
+        fi
