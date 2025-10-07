@@ -1,12 +1,16 @@
 import aiosqlite
 from datetime import datetime
+import os
 
 class Database:
-    def __init__(self, db_path):
+    def __init__(self, db_path='data/hockey_rsvp.db'):
         self.db_path = db_path
 
     async def initialize(self):
         """Create the database tables if they don't exist"""
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        
         async with aiosqlite.connect(self.db_path) as db:
             # Polls table - tracks each poll message
             await db.execute('''

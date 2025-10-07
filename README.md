@@ -103,6 +103,8 @@ The bot automatically checks once per day for games happening in exactly 7 days 
 
 ## Running as a Service (Fedora)
 
+### Option 1: Native Python Service
+
 To keep the bot running in the background:
 
 1. Create a systemd service file:
@@ -140,6 +142,66 @@ To keep the bot running in the background:
    sudo systemctl status hockey-rsvp-bot
    ```
 
+### Option 2: Container with Podman
+
+Run the bot in a Podman container for better isolation and dependency management:
+
+1. Create the data directory:
+   ```bash
+   mkdir -p data
+   ```
+
+2. Build the container image:
+   ```bash
+   podman build -t hockey-rsvp-bot .
+   ```
+
+3. Run with podman-compose:
+   ```bash
+   podman-compose up -d
+   ```
+
+   Or run manually:
+   ```bash
+   podman run -d \
+     --name hockey-rsvp-bot \
+     --restart unless-stopped \
+     -v ./data:/app/data:Z \
+     --env-file .env \
+     hockey-rsvp-bot
+   ```
+
+4. Check container status:
+   ```bash
+   podman ps
+   podman logs hockey-rsvp-bot
+   ```
+
+5. Stop the container:
+   ```bash
+   podman-compose down
+   # or
+   podman stop hockey-rsvp-bot
+   ```
+
+#### Container Management Commands
+
+```bash
+# View logs
+podman logs -f hockey-rsvp-bot
+
+# Restart container
+podman restart hockey-rsvp-bot
+
+# Update container (rebuild and restart)
+podman-compose down
+podman build -t hockey-rsvp-bot .
+podman-compose up -d
+
+# Access container shell for debugging
+podman exec -it hockey-rsvp-bot /bin/bash
+```
+
 ## File Structure
 
 ```
@@ -148,11 +210,52 @@ hockey-rsvp-bot/
 ├── ical_parser.py      # iCal feed parser
 ├── database.py         # SQLite database handler
 ├── requirements.txt    # Python dependencies
+├── Dockerfile          # Container image definition
+├── .dockerignore       # Files to exclude from container
+├── podman-compose.yml  # Podman compose configuration
 ├── .env               # Configuration (create from .env.example)
 ├── .env.example       # Configuration template
-├── hockey_rsvp.db     # SQLite database (created automatically)
+├── data/              # Data directory (for container volume)
+│   └── hockey_rsvp.db # SQLite database (created automatically)
 └── README.md          # This file
 ```
+
+## Automated Deployment
+
+This repository includes GitHub Actions for automatic deployment to your server.
+
+### Setup Instructions
+
+1. **Generate SSH Key** (if you don't have one):
+   ```bash
+   ssh-keygen -t ed25519 -C "github-actions"
+   cat ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys
+   ```
+
+2. **Add GitHub Secrets** in your repository settings:
+   - `HOST` - Your server's IP address or hostname
+   - `USERNAME` - Your server username (e.g., `silmser`)
+   - `SSH_KEY` - Contents of your private SSH key (`~/.ssh/id_ed25519`)
+   - `PROJECT_PATH` - Full path to your project (optional, defaults to `/home/silmser/home_repos/hockey-rsvp-bot`)
+
+3. **Deploy**:
+   - Push to `main` branch to trigger automatic deployment
+   - Or manually trigger from GitHub Actions tab
+
+The workflow will:
+- Pull latest code on your server
+- Rebuild the container with new code
+- Restart the bot
+- Verify it's running successfully
+
+### Manual Deployment
+
+You can also trigger deployment manually:
+```bash
+git push origin main
+```
+
+Or use the "Run workflow" button in GitHub Actions.
 
 ## Future Enhancements
 

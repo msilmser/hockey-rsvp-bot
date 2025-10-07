@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  hockey-rsvp-bot:
+    build: .
+    container_name: hockey-rsvp-bot
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - CHANNEL_ID=${CHANNEL_ID}
+      - ICAL_URL=${ICAL_URL}
+      - TIMEZONE=${TIMEZONE:-America/Toronto}
+    env_file:
+      - .env

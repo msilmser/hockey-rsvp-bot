@@ -46,7 +46,7 @@ REACTIONS = {
 @bot.event
 async def on_ready():
     global db
-    db = Database('hockey_rsvp.db')
+    db = Database('data/hockey_rsvp.db')
     await db.initialize()
     print(f'{bot.user} has connected to Discord!')
     check_upcoming_games.start()
