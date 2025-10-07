@@ -18,6 +18,16 @@ jobs:
         # Stop current container
         podman-compose down || true
         
+        # Copy .env file from main repo directory
+        if [ -f /home/silmser/home_repos/hockey-rsvp-bot/.env ]; then
+          cp /home/silmser/home_repos/hockey-rsvp-bot/.env .env
+          echo "✅ Copied .env file from main repo"
+        else
+          echo "❌ .env file not found in main repo directory!"
+          echo "Please create /home/silmser/home_repos/hockey-rsvp-bot/.env from .env.example"
+          exit 1
+        fi
+        
         # Rebuild container with latest code
         podman build -t hockey-rsvp-bot .
         
