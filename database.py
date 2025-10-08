@@ -39,7 +39,7 @@ class Database:
                     poll_id INTEGER NOT NULL,
                     user_id INTEGER NOT NULL,
                     username TEXT NOT NULL,
-                    response TEXT NOT NULL CHECK(response IN ('yes', 'no', 'maybe')),
+                    response TEXT NOT NULL CHECK(response IN ('yes', 'no', 'if_needed')),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE,
@@ -137,7 +137,7 @@ class Database:
                 GROUP BY response
             ''', (poll_id,)) as cursor:
                 rows = await cursor.fetchall()
-                stats = {'yes': 0, 'no': 0, 'maybe': 0}
+                stats = {'yes': 0, 'no': 0, 'if_needed': 0}
                 for row in rows:
                     stats[row['response']] = row['count']
                 return stats

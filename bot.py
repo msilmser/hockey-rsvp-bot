@@ -40,7 +40,7 @@ db = None
 REACTIONS = {
     'yes': '✅',
     'no': '❌',
-    'maybe': '❓'
+    'if_needed': '🤷'
 }
 
 @bot.event
@@ -100,9 +100,9 @@ async def create_game_poll(channel, game):
 
     embed.add_field(name="✅ Yes", value="0 players", inline=True)
     embed.add_field(name="❌ No", value="0 players", inline=True)
-    embed.add_field(name="❓ Maybe", value="0 players", inline=True)
+    embed.add_field(name="🤷 If needed", value="0 players", inline=True)
 
-    embed.set_footer(text="React with ✅, ❌, or ❓ to RSVP")
+    embed.set_footer(text="React with ✅, ❌, or 🤷 to RSVP")
 
     message = await channel.send(embed=embed)
 
@@ -173,7 +173,7 @@ async def update_poll_message(message, poll_id):
     rsvps = await db.get_rsvps_for_poll(poll_id)
 
     # Count responses - use mentions instead of usernames
-    counts = {'yes': [], 'no': [], 'maybe': []}
+    counts = {'yes': [], 'no': [], 'if_needed': []}
     for rsvp in rsvps:
         user_mention = f"<@{rsvp['user_id']}>"
         counts[rsvp['response']].append(user_mention)
@@ -186,7 +186,7 @@ async def update_poll_message(message, poll_id):
 
     yes_users = '\n'.join(counts['yes']) if counts['yes'] else 'None'
     no_users = '\n'.join(counts['no']) if counts['no'] else 'None'
-    maybe_users = '\n'.join(counts['maybe']) if counts['maybe'] else 'None'
+    if_needed_users = '\n'.join(counts['if_needed']) if counts['if_needed'] else 'None'
 
     embed.add_field(
         name=f"✅ Yes ({len(counts['yes'])})",
@@ -199,8 +199,8 @@ async def update_poll_message(message, poll_id):
         inline=True
     )
     embed.add_field(
-        name=f"❓ Maybe ({len(counts['maybe'])})",
-        value=maybe_users if len(maybe_users) <= 1024 else f"{len(counts['maybe'])} players",
+        name=f"🤷 If needed ({len(counts['if_needed'])})",
+        value=if_needed_users if len(if_needed_users) <= 1024 else f"{len(counts['if_needed'])} players",
         inline=True
     )
 
@@ -292,7 +292,7 @@ async def test_reminder(ctx):
 
         # Create reminder message
         reminder_text = f"⏰ **TEST REMINDER**: Game in approximately {hours_until} hours!\n\n"
-        reminder_text += f"Current RSVPs: ✅ {stats['yes']} | ❌ {stats['no']} | ❓ {stats['maybe']}\n\n"
+        reminder_text += f"Current RSVPs: ✅ {stats['yes']} | ❌ {stats['no']} | 🤷 {stats['if_needed']}\n\n"
 
         # Get list of users who haven't responded
         responded_users = {rsvp['user_id'] for rsvp in rsvps}
@@ -343,7 +343,7 @@ async def check_reminders():
 
             # Create reminder message
             reminder_text = f"⏰ **REMINDER**: Game in approximately {hours_until} hours!\n\n"
-            reminder_text += f"Current RSVPs: ✅ {stats['yes']} | ❌ {stats['no']} | ❓ {stats['maybe']}\n\n"
+            reminder_text += f"Current RSVPs: ✅ {stats['yes']} | ❌ {stats['no']} | 🤷 {stats['if_needed']}\n\n"
 
             # Get list of users who haven't responded
             responded_users = {rsvp['user_id'] for rsvp in rsvps}
