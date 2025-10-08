@@ -6,9 +6,12 @@ A Discord bot that automatically tracks RSVPs for hockey games by parsing an iCa
 
 - 📅 Fetches games from your team's iCal feed
 - 🤖 Automatically creates polls 7 days before each game
-- ✅ Players can RSVP with Yes/No/Maybe reactions
+- ✅ Players can RSVP with Yes/No/If needed reactions
 - 💾 Stores RSVP data in a local SQLite database
 - 📊 Updates poll counts in real-time
+- ⏰ Sends 24-hour reminders before games
+- 🔔 Monitors game time changes and notifies RSVPd players
+- 🏒 Supports multiple teams from different iCal feeds
 
 ## Setup Instructions
 
@@ -95,11 +98,13 @@ The bot automatically checks once per day for games happening in exactly 7 days 
 1. When a poll appears, react with:
    - ✅ for Yes (attending)
    - ❌ for No (not attending)
-   - ❓ for Maybe (uncertain)
+   - 🤷 for If needed (can attend if needed)
 
 2. Your response will be tracked automatically
 3. You can change your response by clicking a different reaction
 4. The poll will update in real-time with current counts
+5. You'll receive a reminder 24 hours before the game
+6. If the game time changes, you'll be notified automatically
 
 ## Running as a Service (Fedora)
 
@@ -222,48 +227,85 @@ hockey-rsvp-bot/
 
 ## Automated Deployment
 
-This repository includes GitHub Actions for automatic deployment to your server using a self-hosted runner.
+This repository includes GitHub Actions for automatic deployment using GitOps with Kubernetes and ArgoCD.
 
-### Setup Instructions
+### How It Works
 
-1. **Generate SSH Key** (if you don't have one):
-   ```bash
-   ssh-keygen -t ed25519 -C "github-actions"
-   cat ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys
-   ```
+1. **Push to main branch** triggers GitHub Actions
+2. **GitHub Action builds** Docker image using Podman
+3. **Image pushed** to GitHub Container Registry (GHCR)
+4. **ArgoCD detects** new image version
+5. **Kubernetes deploys** updated bot automatically
 
-2. **Add GitHub Secrets** in your repository settings:
-   - `HOST` - Your server's IP address or hostname
-   - `USERNAME` - Your server username (e.g., `silmser`)
-   - `SSH_KEY` - Contents of your private SSH key (`~/.ssh/id_ed25519`)
-   - `PROJECT_PATH` - Full path to your project (optional, defaults to `/home/silmser/home_repos/hockey-rsvp-bot`)
+### GitHub Action Workflow
 
-3. **Deploy**:
-   - Push to `main` branch to trigger automatic deployment
-   - Or manually trigger from GitHub Actions tab
+The workflow (`.github/workflows/deploy.yml`) automatically:
+- Builds the Docker image with Podman
+- Tags with `latest`, branch name, and commit SHA
+- Pushes to `ghcr.io/msilmser/hockey-rsvp-bot`
+- Runs on self-hosted runner with Podman
 
-The workflow will:
-- Pull latest code on your server
-- Rebuild the container with new code
-- Restart the bot
-- Verify it's running successfully
+### Kubernetes Deployment
 
-### Manual Deployment
+The bot runs in a Kubernetes cluster managed by ArgoCD:
+- **Namespace**: `hockey-rsvp-bot`
+- **Config**: Stored in Kubernetes Secret
+- **Data**: Persistent volume for SQLite database
+- **Image**: `ghcr.io/msilmser/hockey-rsvp-bot:latest`
 
-You can also trigger deployment manually:
+To view deployment status:
 ```bash
-git push origin main
+kubectl get pods -n hockey-rsvp-bot
+kubectl logs -n hockey-rsvp-bot -l app=hockey-rsvp-bot
 ```
 
-Or use the "Run workflow" button in GitHub Actions.
+## Monitoring and Notifications
+
+### Automatic Checks
+
+The bot runs several scheduled tasks:
+
+- **Daily (24h)**: Check for games 7 days away and create polls
+- **Hourly**: Send 24-hour reminders for upcoming games
+- **Every 2 hours**: Check for game time changes in iCal feed
+
+### Game Time Change Detection
+
+When a game time changes in the iCal feed:
+1. Poll embed timestamp is updated
+2. Time change notice added to poll description
+3. All users who RSVPd are mentioned in a reply
+4. Shows old time vs new time (earlier/later)
+5. Only triggers for changes >15 minutes
+
+## Configuration
+
+### Environment Variables
+
+- `DISCORD_BOT_TOKEN` - Your Discord bot token
+- `CHANNEL_ID` - Discord channel ID for polls
+- `ICAL_URLS` - Comma-separated list of iCal feed URLs
+- `TEAM_NAMES` - Comma-separated team names (matching ICAL_URLS order)
+- `TIMEZONE` - Timezone for game times (e.g., `America/New_York`)
+
+### Multiple Teams
+
+To track multiple teams, provide comma-separated values:
+
+```env
+ICAL_URLS=webcal://feed1.com/team1.ics,webcal://feed2.com/team2.ics
+TEAM_NAMES=Wednesday Rookie,Sunday Novice
+```
+
+The bot will create polls for all teams in the same Discord channel.
 
 ## Future Enhancements
 
 - Google Calendar integration to update event descriptions with RSVP data
 - Web dashboard to view RSVP history
-- Notifications/reminders for players who haven't responded
 - Export RSVP data to CSV
-- Multi-team support
+- Separate channels per team
+- Game result tracking
 
 ## Troubleshooting
 
