@@ -1,45 +1,46 @@
-name: Deploy Hockey RSVP Bot
+name: Build and Push Hockey RSVP Bot
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
-  deploy:
+  build-and-push:
     runs-on: self-hosted
-    
+    permissions:
+      contents: read
+      packages: write
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
-    - name: Deploy bot
-      run: |
-        # Stop current container
-        podman-compose down || true
-        
-        # Copy .env file from main repo directory
-        if [ -f /home/silmser/home_repos/hockey-rsvp-bot/.env ]; then
-          cp /home/silmser/home_repos/hockey-rsvp-bot/.env .env
-          echo "✅ Copied .env file from main repo"
-        else
-          echo "❌ .env file not found in main repo directory!"
-          echo "Please create /home/silmser/home_repos/hockey-rsvp-bot/.env from .env.example"
-          exit 1
-        fi
-        
-        # Rebuild container with latest code
-        podman build -t hockey-rsvp-bot .
-        
-        # Start container
-        podman-compose up -d
-        
-        # Check if container started successfully
-        sleep 5
-        if podman ps | grep -q hockey-rsvp-bot; then
-          echo "✅ Deployment successful - Bot is running"
-        else
-          echo "❌ Deployment failed - Container not running"
-          podman logs hockey-rsvp-bot
-          exit 1
-        fi
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata for Docker
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=sha,prefix={{branch}}-
+          type=ref,event=branch
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
