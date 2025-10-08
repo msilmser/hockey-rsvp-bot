@@ -51,6 +51,7 @@ async def on_ready():
     print(f'{bot.user} has connected to Discord!')
     check_upcoming_games.start()
     check_reminders.start()
+    check_game_time_changes.start()
 
 @tasks.loop(hours=24)
 async def check_upcoming_games():
@@ -366,6 +367,98 @@ async def check_reminders():
             await db.mark_reminder_sent(poll['id'])
         except Exception as e:
             print(f"Error sending reminder for poll {poll['id']}: {e}")
+
+@tasks.loop(hours=2)
+async def check_game_time_changes():
+    """Check every 2 hours for game time changes"""
+    await bot.wait_until_ready()
+
+    channel = bot.get_channel(CHANNEL_ID)
+    if not channel:
+        print(f"Could not find channel with ID {CHANNEL_ID}")
+        return
+
+    # Get all active polls (games that haven't happened yet)
+    polls = await db.get_active_polls()
+
+    for poll in polls:
+        try:
+            game_id = poll['game_id']
+            stored_time = datetime.fromisoformat(poll['game_time'])
+
+            # Find which team this game belongs to
+            current_game = None
+            team_name = None
+            for team in ical_parsers:
+                game = await team['parser'].get_game_by_id(game_id)
+                if game:
+                    current_game = game
+                    team_name = team['name']
+                    break
+
+            if not current_game:
+                print(f"Game {game_id} no longer found in calendar feed")
+                continue
+
+            # Check if time has changed
+            new_time = current_game['start_time']
+            if new_time != stored_time:
+                # Time has changed!
+                time_diff = new_time - stored_time
+                hours_diff = abs(time_diff.total_seconds() / 3600)
+
+                # Only notify if the change is significant (more than 15 minutes)
+                if hours_diff >= 0.25:
+                    print(f"Game time changed for {game_id}: {stored_time} -> {new_time}")
+
+                    # Fetch the poll message
+                    message = await channel.fetch_message(poll['message_id'])
+
+                    # Update the embed with new time
+                    embed = message.embeds[0]
+                    embed.timestamp = new_time
+
+                    # Update description to include time change notice
+                    old_time_str = stored_time.strftime('%I:%M %p')
+                    new_time_str = new_time.strftime('%I:%M %p')
+
+                    if time_diff.total_seconds() > 0:
+                        change_text = f"\n\n⚠️ **TIME CHANGE**: Game moved from {old_time_str} to {new_time_str} (later)"
+                    else:
+                        change_text = f"\n\n⚠️ **TIME CHANGE**: Game moved from {old_time_str} to {new_time_str} (earlier)"
+
+                    # Update embed description
+                    current_desc = embed.description or ""
+                    # Remove any previous time change notices
+                    if "⚠️ **TIME CHANGE**" in current_desc:
+                        current_desc = current_desc.split("\n\n⚠️ **TIME CHANGE**")[0]
+                    embed.description = current_desc + change_text
+
+                    await message.edit(embed=embed)
+
+                    # Get all users who have RSVPd
+                    rsvps = await db.get_rsvps_for_poll(poll['id'])
+
+                    if rsvps:
+                        # Notify users about the time change
+                        user_mentions = ' '.join([f"<@{rsvp['user_id']}>" for rsvp in rsvps])
+                        notification = f"🔔 **Game time has changed!**\n\n"
+                        notification += f"**{team_name}** game on {new_time.strftime('%B %d')}\n"
+                        notification += f"**Old time**: {old_time_str}\n"
+                        notification += f"**New time**: {new_time_str}\n\n"
+                        notification += f"Please check if you can still make it: {user_mentions}"
+
+                        await message.reply(notification)
+
+                    # Update database with new time
+                    await db.update_poll_game_time(poll['id'], new_time)
+
+                    print(f"Updated poll {poll['id']} with new game time and notified {len(rsvps)} users")
+
+        except discord.errors.NotFound:
+            print(f"Poll message {poll['message_id']} not found")
+        except Exception as e:
+            print(f"Error checking game time for poll {poll['id']}: {e}")
 
 if __name__ == '__main__':
     bot.run(DISCORD_TOKEN)

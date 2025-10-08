@@ -61,6 +61,21 @@ class ICalParser:
         games.sort(key=lambda x: x['start_time'])
         return games
 
+    async def get_game_by_id(self, game_id):
+        """Get a specific game by its UID"""
+        calendar = self.fetch_calendar()
+        if not calendar:
+            return None
+
+        # Search for the event with matching UID
+        for component in calendar.walk():
+            if component.name == "VEVENT":
+                uid = str(component.get('UID', ''))
+                if uid == game_id:
+                    return self._parse_event(component)
+
+        return None
+
     def _parse_event(self, event):
         """Parse a calendar event into a game dictionary"""
         try:

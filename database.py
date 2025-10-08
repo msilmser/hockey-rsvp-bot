@@ -163,6 +163,27 @@ class Database:
             )
             await db.commit()
 
+    async def get_active_polls(self):
+        """Get all polls for games that haven't happened yet"""
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute('''
+                SELECT * FROM polls
+                WHERE game_time > ?
+                ORDER BY game_time ASC
+            ''', (datetime.now().isoformat(),)) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+
+    async def update_poll_game_time(self, poll_id, new_game_time):
+        """Update the game time for a poll"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                'UPDATE polls SET game_time = ? WHERE id = ?',
+                (new_game_time.isoformat(), poll_id)
+            )
+            await db.commit()
+
     async def get_next_upcoming_poll(self):
         """Get the next upcoming game poll"""
         async with aiosqlite.connect(self.db_path) as db:
