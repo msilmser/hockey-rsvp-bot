@@ -21,7 +21,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Configuration
 DISCORD_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
-CHANNEL_ID = int(os.getenv('CHANNEL_ID'))
+CHANNEL_IDS = [int(ch.strip()) for ch in os.getenv('CHANNEL_IDS', '').split(',') if ch.strip()]
 ICAL_URLS = [url.strip() for url in os.getenv('ICAL_URLS', '').split(',')]
 TEAM_NAMES = [name.strip() for name in os.getenv('TEAM_NAMES', '').split(',')]
 TIMEZONE = pytz.timezone(os.getenv('TIMEZONE', 'America/Toronto'))
@@ -58,11 +58,6 @@ async def check_upcoming_games():
     """Check daily for games that are 7 days away and create polls"""
     await bot.wait_until_ready()
 
-    channel = bot.get_channel(CHANNEL_ID)
-    if not channel:
-        print(f"Could not find channel with ID {CHANNEL_ID}")
-        return
-
     # Get games happening in 7 days for all teams
     target_date = datetime.now(TIMEZONE) + timedelta(days=7)
 
@@ -78,11 +73,19 @@ async def check_upcoming_games():
             # Add team name to game data
             game['team_name'] = team['name']
 
-            # Create poll message
-            poll_message = await create_game_poll(channel, game)
+            # Create poll in all configured channels
+            for channel_id in CHANNEL_IDS:
+                channel = bot.get_channel(channel_id)
+                if not channel:
+                    print(f"Could not find channel with ID {channel_id}")
+                    continue
 
-            # Save poll to database
-            await db.create_poll(game['id'], poll_message.id, game['start_time'])
+                # Create poll message
+                poll_message = await create_game_poll(channel, game)
+
+                # Save poll to database (first channel only to avoid duplicates)
+                if channel_id == CHANNEL_IDS[0]:
+                    await db.create_poll(game['id'], poll_message.id, game['start_time'])
 
 async def create_game_poll(channel, game):
     """Create a poll message for a game"""
@@ -91,10 +94,18 @@ async def create_game_poll(channel, game):
     opponent = game.get('opponent', 'TBD')
     location = game.get('location', 'Home')
     team_name = game.get('team_name', 'Team')
+    is_home = game.get('is_home')
+
+    # Determine jersey color
+    jersey_text = ""
+    if is_home is True:
+        jersey_text = "\n**Jersey: Home Darks** ⬛"
+    elif is_home is False:
+        jersey_text = "\n**Jersey: Road Whites** ⬜"
 
     embed = discord.Embed(
         title=f"🏒 {team_name} - Game RSVP",
-        description=f"**{start_time}**\n\nOpponent: {opponent}\nLocation: {location}",
+        description=f"**{start_time}**\n\nOpponent: {opponent}\nLocation: {location}{jersey_text}",
         color=discord.Color.blue(),
         timestamp=game['start_time']
     )

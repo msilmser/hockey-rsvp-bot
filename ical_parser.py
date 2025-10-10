@@ -101,13 +101,17 @@ class ICalParser:
             # Try to extract opponent from summary
             opponent = self._extract_opponent(summary)
 
+            # Determine if home or away game
+            is_home = self._is_home_game(summary)
+
             return {
                 'id': uid,
                 'start_time': dtstart,
                 'summary': summary,
                 'opponent': opponent,
                 'location': location,
-                'description': description
+                'description': description,
+                'is_home': is_home
             }
         except Exception as e:
             print(f"Error parsing event: {e}")
@@ -124,3 +128,13 @@ class ICalParser:
             return parts[1].strip() if len(parts) > 1 else summary
         else:
             return summary
+
+    def _is_home_game(self, summary):
+        """Determine if Mighty Pucks is the home team (format: AWAY @ HOME)"""
+        if ' @ ' in summary:
+            parts = summary.split(' @ ')
+            if len(parts) == 2:
+                home_team = parts[1].strip().lower()
+                # Check if Mighty Pucks is the home team
+                return 'mighty pucks' in home_team
+        return None  # Unknown if not in AWAY @ HOME format
