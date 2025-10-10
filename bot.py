@@ -289,8 +289,8 @@ async def test_reminder(ctx):
         return
 
     try:
-        # Fetch the poll message
-        channel = bot.get_channel(CHANNEL_ID)
+        # Fetch the poll message from first channel
+        channel = bot.get_channel(CHANNEL_IDS[0])
         message = await channel.fetch_message(poll['message_id'])
 
         # Get RSVP stats
@@ -328,9 +328,9 @@ async def check_reminders():
     """Check hourly for games that need 24-hour reminders"""
     await bot.wait_until_ready()
 
-    channel = bot.get_channel(CHANNEL_ID)
+    channel = bot.get_channel(CHANNEL_IDS[0])
     if not channel:
-        print(f"Could not find channel with ID {CHANNEL_ID}")
+        print(f"Could not find channel with ID {CHANNEL_IDS[0]}")
         return
 
     # Get current time + 24 hours
@@ -384,9 +384,9 @@ async def check_game_time_changes():
     """Check every 2 hours for game time changes"""
     await bot.wait_until_ready()
 
-    channel = bot.get_channel(CHANNEL_ID)
+    channel = bot.get_channel(CHANNEL_IDS[0])
     if not channel:
-        print(f"Could not find channel with ID {CHANNEL_ID}")
+        print(f"Could not find channel with ID {CHANNEL_IDS[0]}")
         return
 
     # Get all active polls (games that haven't happened yet)
