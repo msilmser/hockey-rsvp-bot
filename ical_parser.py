@@ -118,16 +118,22 @@ class ICalParser:
             return None
 
     def _extract_opponent(self, summary):
-        """Extract opponent team name from the game summary"""
-        # Common patterns: "vs Team Name", "@ Team Name", "Team Name vs Team Name"
-        if ' vs ' in summary.lower():
-            parts = summary.lower().split(' vs ')
-            return parts[1].strip() if len(parts) > 1 else summary
-        elif ' @ ' in summary:
+        """Extract opponent team name from the game summary (format: AWAY @ HOME)"""
+        if ' @ ' in summary:
             parts = summary.split(' @ ')
-            return parts[1].strip() if len(parts) > 1 else summary
-        else:
-            return summary
+            if len(parts) == 2:
+                away_team = parts[0].strip()
+                home_team = parts[1].strip()
+
+                # If Mighty Pucks is home, opponent is away team
+                if 'mighty pucks' in home_team.lower():
+                    return away_team
+                # If Mighty Pucks is away, opponent is home team
+                elif 'mighty pucks' in away_team.lower():
+                    return home_team
+
+        # Fallback to full summary if format doesn't match
+        return summary
 
     def _is_home_game(self, summary):
         """Determine if Mighty Pucks is the home team (format: AWAY @ HOME)"""
