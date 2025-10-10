@@ -239,6 +239,54 @@ async def test_poll(ctx, team_index: int = 0):
     await db.create_poll(game['id'], poll_message.id, game['start_time'])
     await ctx.send(f"Test poll created for {team['name']} game on {game['start_time'].strftime('%B %d')}")
 
+@bot.command(name='schedule')
+async def show_schedule(ctx, days: int = 30):
+    """Show remaining games for the season. Optional: specify number of days to look ahead"""
+    all_games = []
+
+    # Get games from all teams
+    for team in ical_parsers:
+        games = await team['parser'].get_upcoming_games(days=days)
+        for game in games:
+            game['team_name'] = team['name']
+            all_games.append(game)
+
+    if not all_games:
+        await ctx.send(f"No games found in the next {days} days.")
+        return
+
+    # Sort by date
+    all_games.sort(key=lambda x: x['start_time'])
+
+    # Build schedule message
+    schedule_text = f"📅 **Upcoming Games (next {days} days)**\n\n"
+
+    for game in all_games:
+        game_time = game['start_time'].strftime('%a %b %d at %I:%M %p')
+        opponent = game.get('opponent', 'TBD')
+        location = game.get('location', 'TBD')
+        is_home = game.get('is_home')
+
+        # Determine jersey
+        jersey = ""
+        if is_home is True:
+            jersey = "⬛ Home Darks"
+        elif is_home is False:
+            jersey = "⬜ Road Whites"
+        else:
+            jersey = "❓ TBD"
+
+        schedule_text += f"**{game_time}**\n"
+        schedule_text += f"vs {opponent} | {location} | {jersey}\n\n"
+
+    # Split message if too long (Discord limit is 2000 chars)
+    if len(schedule_text) > 2000:
+        chunks = [schedule_text[i:i+1900] for i in range(0, len(schedule_text), 1900)]
+        for chunk in chunks:
+            await ctx.send(chunk)
+    else:
+        await ctx.send(schedule_text)
+
 @bot.command(name='checkgames')
 async def check_games(ctx):
     """Manually trigger the daily game check (admin only)"""
