@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import asyncio
 from datetime import datetime, timedelta
 import pytz
+import aiosqlite
 from ical_parser import ICalParser
 from database import Database
 
@@ -370,6 +371,114 @@ async def test_reminder(ctx):
         await ctx.send(f"Poll message not found.")
     except Exception as e:
         await ctx.send(f"Error sending reminder: {e}")
+
+@bot.command(name='syncpoll')
+async def sync_poll(ctx, message_id: int = None):
+    """Sync poll RSVPs from Discord reactions to database. Usage: !syncpoll <message_id> or reply to a poll message"""
+    try:
+        # If no message_id provided, check if this is a reply to a poll
+        if message_id is None:
+            if ctx.message.reference:
+                message_id = ctx.message.reference.message_id
+            else:
+                await ctx.send("Please provide a message ID or reply to a poll message. Usage: `!syncpoll <message_id>`")
+                return
+
+        # Check if this is a poll message
+        poll = await db.get_poll_by_message_id(message_id)
+        if not poll:
+            await ctx.send(f"No poll found with message ID {message_id}")
+            return
+
+        # Fetch the message
+        message = await ctx.channel.fetch_message(message_id)
+
+        # Clear all existing RSVPs for this poll
+        async with aiosqlite.connect(db.db_path) as database:
+            await database.execute('DELETE FROM rsvps WHERE poll_id = ?', (poll['id'],))
+            await database.commit()
+
+        # Read reactions and rebuild RSVPs
+        synced_count = 0
+        emoji_to_response = {v: k for k, v in REACTIONS.items()}
+
+        for reaction in message.reactions:
+            emoji_str = str(reaction.emoji)
+            if emoji_str in emoji_to_response:
+                response_type = emoji_to_response[emoji_str]
+
+                # Get all users who reacted with this emoji
+                async for user in reaction.users():
+                    if user.id != bot.user.id:  # Skip bot's own reactions
+                        await db.add_or_update_rsvp(poll['id'], user.id, str(user), response_type)
+                        synced_count += 1
+
+        # Update the poll message to reflect the synced data
+        await update_poll_message(message, poll['id'])
+
+        await ctx.send(f"✅ Synced {synced_count} RSVPs from Discord reactions to database and updated poll message.")
+
+    except discord.errors.NotFound:
+        await ctx.send(f"Message with ID {message_id} not found.")
+    except Exception as e:
+        await ctx.send(f"Error syncing poll: {e}")
+
+@bot.command(name='syncallpolls')
+async def sync_all_polls(ctx):
+    """Sync all active polls from Discord reactions to database"""
+    try:
+        # Get all active polls
+        active_polls = await db.get_active_polls()
+
+        if not active_polls:
+            await ctx.send("No active polls found.")
+            return
+
+        await ctx.send(f"Syncing {len(active_polls)} active polls...")
+
+        success_count = 0
+        error_count = 0
+        total_rsvps = 0
+
+        for poll in active_polls:
+            try:
+                # Fetch the message
+                message = await ctx.channel.fetch_message(poll['message_id'])
+
+                # Clear all existing RSVPs for this poll
+                async with aiosqlite.connect(db.db_path) as database:
+                    await database.execute('DELETE FROM rsvps WHERE poll_id = ?', (poll['id'],))
+                    await database.commit()
+
+                # Read reactions and rebuild RSVPs
+                emoji_to_response = {v: k for k, v in REACTIONS.items()}
+
+                for reaction in message.reactions:
+                    emoji_str = str(reaction.emoji)
+                    if emoji_str in emoji_to_response:
+                        response_type = emoji_to_response[emoji_str]
+
+                        # Get all users who reacted with this emoji
+                        async for user in reaction.users():
+                            if user.id != bot.user.id:  # Skip bot's own reactions
+                                await db.add_or_update_rsvp(poll['id'], user.id, str(user), response_type)
+                                total_rsvps += 1
+
+                # Update the poll message
+                await update_poll_message(message, poll['id'])
+                success_count += 1
+
+            except discord.errors.NotFound:
+                error_count += 1
+                await ctx.send(f"⚠️ Poll message {poll['message_id']} not found, skipping...")
+            except Exception as e:
+                error_count += 1
+                await ctx.send(f"⚠️ Error syncing poll {poll['id']}: {e}")
+
+        await ctx.send(f"✅ Sync complete! Successfully synced {success_count} polls with {total_rsvps} total RSVPs. {error_count} errors.")
+
+    except Exception as e:
+        await ctx.send(f"Error syncing polls: {e}")
 
 @tasks.loop(hours=1)
 async def check_reminders():
