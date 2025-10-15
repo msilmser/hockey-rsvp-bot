@@ -485,6 +485,11 @@ async def check_reminders():
     """Check hourly for games that need 24-hour reminders"""
     await bot.wait_until_ready()
 
+    # Check if CHANNEL_IDS is configured
+    if not CHANNEL_IDS:
+        print("ERROR: CHANNEL_IDS is not configured. Please set the CHANNEL_IDS environment variable.")
+        return
+
     channel = bot.get_channel(CHANNEL_IDS[0])
     if not channel:
         print(f"Could not find channel with ID {CHANNEL_IDS[0]}")
@@ -540,6 +545,11 @@ async def check_reminders():
 async def check_game_time_changes():
     """Check every 2 hours for game time changes"""
     await bot.wait_until_ready()
+
+    # Check if CHANNEL_IDS is configured
+    if not CHANNEL_IDS:
+        print("ERROR: CHANNEL_IDS is not configured. Please set the CHANNEL_IDS environment variable.")
+        return
 
     channel = bot.get_channel(CHANNEL_IDS[0])
     if not channel:

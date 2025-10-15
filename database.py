@@ -10,8 +10,10 @@ class Database:
         """Create the database tables if they don't exist"""
         # Ensure the directory exists
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        
+
         async with aiosqlite.connect(self.db_path) as db:
+            # Migration: Fix schema mismatch from 'maybe' to 'if_needed'
+            await self._migrate_maybe_to_if_needed(db)
             # Polls table - tracks each poll message
             await db.execute('''
                 CREATE TABLE IF NOT EXISTS polls (
@@ -196,3 +198,51 @@ class Database:
             ''', (datetime.now().isoformat(),)) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else None
+
+    async def _migrate_maybe_to_if_needed(self, db):
+        """Migration: Update schema from 'maybe' to 'if_needed'"""
+        try:
+            # Check if rsvps table exists and has the old constraint
+            async with db.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='rsvps'"
+            ) as cursor:
+                result = await cursor.fetchone()
+                if result and "'maybe'" in result[0]:
+                    print("Migrating database: updating 'maybe' to 'if_needed'...")
+
+                    # Update any existing 'maybe' values to 'if_needed'
+                    await db.execute("UPDATE rsvps SET response = 'if_needed' WHERE response = 'maybe'")
+
+                    # Recreate table with correct schema
+                    await db.execute('''
+                        CREATE TABLE rsvps_new (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            poll_id INTEGER NOT NULL,
+                            user_id INTEGER NOT NULL,
+                            username TEXT NOT NULL,
+                            response TEXT NOT NULL CHECK(response IN ('yes', 'no', 'if_needed')),
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE,
+                            UNIQUE(poll_id, user_id)
+                        )
+                    ''')
+
+                    # Copy data
+                    await db.execute('''
+                        INSERT INTO rsvps_new (id, poll_id, user_id, username, response, created_at, updated_at)
+                        SELECT id, poll_id, user_id, username, response, created_at, updated_at
+                        FROM rsvps
+                    ''')
+
+                    # Drop old table and rename new one
+                    await db.execute('DROP TABLE rsvps')
+                    await db.execute('ALTER TABLE rsvps_new RENAME TO rsvps')
+
+                    # Recreate index
+                    await db.execute('CREATE INDEX IF NOT EXISTS idx_rsvps_poll_id ON rsvps(poll_id)')
+
+                    await db.commit()
+                    print("Database migration completed successfully!")
+        except Exception as e:
+            print(f"Migration warning (safe to ignore if fresh database): {e}")
