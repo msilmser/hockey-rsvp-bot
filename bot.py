@@ -56,19 +56,22 @@ async def on_ready():
 
 @tasks.loop(hours=24)
 async def check_upcoming_games():
-    """Check daily for games that are 7 days away and create polls"""
+    """Check daily for games in the next 7 days and create polls if they don't exist"""
     await bot.wait_until_ready()
 
-    # Get games happening in 7 days for all teams
-    target_date = datetime.now(TIMEZONE) + timedelta(days=7)
+    # Get games happening in the next 7 days for all teams
+    print(f"Checking for games in the next 7 days...")
 
     for team in ical_parsers:
-        games = await team['parser'].get_games_on_date(target_date)
+        print(f"Checking {team['name']}...")
+        games = await team['parser'].get_upcoming_games(days=7)
+        print(f"Found {len(games)} games for {team['name']} in the next 7 days")
 
         for game in games:
             # Check if poll already exists for this game
             existing_poll = await db.get_poll_by_game_id(game['id'])
             if existing_poll:
+                print(f"Poll already exists for game {game['id']} on {game['start_time'].strftime('%B %d')}, skipping")
                 continue
 
             # Add team name to game data
@@ -82,11 +85,13 @@ async def check_upcoming_games():
                     continue
 
                 # Create poll message
+                print(f"Creating poll for {team['name']} game on {game['start_time'].strftime('%B %d at %I:%M %p')}")
                 poll_message = await create_game_poll(channel, game)
 
                 # Save poll to database (first channel only to avoid duplicates)
                 if channel_id == CHANNEL_IDS[0]:
                     await db.create_poll(game['id'], poll_message.id, game['start_time'])
+                    print(f"Created poll {poll_message.id} for game {game['id']}")
 
 async def create_game_poll(channel, game):
     """Create a poll message for a game"""
@@ -291,7 +296,7 @@ async def show_schedule(ctx, days: int = 30):
 @bot.command(name='checkgames')
 async def check_games(ctx):
     """Manually trigger the daily game check (admin only)"""
-    await ctx.send("Checking for games 7 days from now...")
+    await ctx.send("Checking for games in the next 7 days...")
     await check_upcoming_games()
     await ctx.send("Check complete!")
 
