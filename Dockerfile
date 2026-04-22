@@ -14,4 +14,6 @@ USER botuser
 
 VOLUME ["/app/data"]
 
+ENV PYTHONUNBUFFERED=1
+
 CMD ["python", "bot.py"]
