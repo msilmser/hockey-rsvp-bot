@@ -6,3 +6,5 @@ recurring-ical-events>=2.1.2
 pytz>=2023.3
 APScheduler>=3.10.4
 aiosqlite>=0.19.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
