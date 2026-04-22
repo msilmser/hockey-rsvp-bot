@@ -1,3 +1,5 @@
+import asyncio
+import functools
 import requests
 from icalendar import Calendar
 from datetime import datetime, timedelta
@@ -9,10 +11,13 @@ class ICalParser:
         self.ical_url = ical_url.replace('webcal://', 'https://')
         self.timezone = timezone
 
-    def fetch_calendar(self):
+    async def fetch_calendar(self):
         """Fetch the iCal feed from the URL"""
         try:
-            response = requests.get(self.ical_url, timeout=10)
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None, functools.partial(requests.get, self.ical_url, timeout=10)
+            )
             response.raise_for_status()
             return Calendar.from_ical(response.content)
         except Exception as e:
@@ -21,7 +26,7 @@ class ICalParser:
 
     async def get_games_on_date(self, target_date):
         """Get all games on a specific date (comparing just the date, not time)"""
-        calendar = self.fetch_calendar()
+        calendar = await self.fetch_calendar()
         if not calendar:
             return []
 
@@ -41,7 +46,7 @@ class ICalParser:
 
     async def get_upcoming_games(self, days=30):
         """Get all games in the next X days"""
-        calendar = self.fetch_calendar()
+        calendar = await self.fetch_calendar()
         if not calendar:
             return []
 
@@ -63,7 +68,7 @@ class ICalParser:
 
     async def get_game_by_id(self, game_id):
         """Get a specific game by its UID"""
-        calendar = self.fetch_calendar()
+        calendar = await self.fetch_calendar()
         if not calendar:
             return None
 

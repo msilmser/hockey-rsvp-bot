@@ -50,9 +50,12 @@ async def on_ready():
     db = Database('data/hockey_rsvp.db')
     await db.initialize()
     print(f'{bot.user} has connected to Discord!')
-    check_upcoming_games.start()
-    check_reminders.start()
-    check_game_time_changes.start()
+    if not check_upcoming_games.is_running():
+        check_upcoming_games.start()
+    if not check_reminders.is_running():
+        check_reminders.start()
+    if not check_game_time_changes.is_running():
+        check_game_time_changes.start()
 
 @tasks.loop(hours=24)
 async def check_upcoming_games():
