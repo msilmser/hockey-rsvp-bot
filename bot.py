@@ -27,13 +27,18 @@ ICAL_URLS = [url.strip() for url in os.getenv('ICAL_URLS', '').split(',')]
 TEAM_NAMES = [name.strip() for name in os.getenv('TEAM_NAMES', '').split(',')]
 TIMEZONE = pytz.timezone(os.getenv('TIMEZONE', 'America/Toronto'))
 
-# Initialize components - create parser for each team
+# Initialize components - create parser for each team.
+# CHANNEL_IDS is ordered 1-to-1 with ICAL_URLS/TEAM_NAMES so each team
+# posts polls to its own dedicated channel (e.g. Wednesday → wed channel,
+# Sunday → sun channel) instead of broadcasting to all channels.
 ical_parsers = []
 for i, ical_url in enumerate(ICAL_URLS):
     team_name = TEAM_NAMES[i] if i < len(TEAM_NAMES) else f"Team {i+1}"
+    channel_id = CHANNEL_IDS[i] if i < len(CHANNEL_IDS) else None
     ical_parsers.append({
         'name': team_name,
-        'parser': ICalParser(ical_url, TIMEZONE)
+        'parser': ICalParser(ical_url, TIMEZONE),
+        'channel_id': channel_id,
     })
 db = None
 
@@ -80,21 +85,22 @@ async def check_upcoming_games():
             # Add team name to game data
             game['team_name'] = team['name']
 
-            # Create poll in all configured channels
-            for channel_id in CHANNEL_IDS:
-                channel = bot.get_channel(channel_id)
-                if not channel:
-                    print(f"Could not find channel with ID {channel_id}")
-                    continue
+            # Route to this team's dedicated channel
+            team_channel_id = team.get('channel_id')
+            if not team_channel_id:
+                print(f"No channel configured for {team['name']}, skipping")
+                continue
 
-                # Create poll message
-                print(f"Creating poll for {team['name']} game on {game['start_time'].strftime('%B %d at %I:%M %p')}")
-                poll_message = await create_game_poll(channel, game)
+            channel = bot.get_channel(team_channel_id)
+            if not channel:
+                print(f"Could not find channel with ID {team_channel_id} for {team['name']}")
+                continue
 
-                # Save poll to database (first channel only to avoid duplicates)
-                if channel_id == CHANNEL_IDS[0]:
-                    await db.create_poll(game['id'], poll_message.id, game['start_time'])
-                    print(f"Created poll {poll_message.id} for game {game['id']}")
+            # Create poll message and record it with its channel
+            print(f"Creating poll for {team['name']} game on {game['start_time'].strftime('%B %d at %I:%M %p')}")
+            poll_message = await create_game_poll(channel, game)
+            await db.create_poll(game['id'], poll_message.id, game['start_time'], team_channel_id)
+            print(f"Created poll {poll_message.id} for game {game['id']}")
 
 async def create_game_poll(channel, game):
     """Create a poll message for a game"""
@@ -346,8 +352,9 @@ async def test_reminder(ctx):
         return
 
     try:
-        # Fetch the poll message from first channel
-        channel = bot.get_channel(CHANNEL_IDS[0])
+        # Fetch the poll message from its dedicated channel
+        poll_channel_id = poll.get('channel_id') or (CHANNEL_IDS[0] if CHANNEL_IDS else None)
+        channel = bot.get_channel(poll_channel_id)
         message = await channel.fetch_message(poll['message_id'])
 
         # Get RSVP stats
@@ -493,16 +500,6 @@ async def check_reminders():
     """Check hourly for games that need 24-hour reminders"""
     await bot.wait_until_ready()
 
-    # Check if CHANNEL_IDS is configured
-    if not CHANNEL_IDS:
-        print("ERROR: CHANNEL_IDS is not configured. Please set the CHANNEL_IDS environment variable.")
-        return
-
-    channel = bot.get_channel(CHANNEL_IDS[0])
-    if not channel:
-        print(f"Could not find channel with ID {CHANNEL_IDS[0]}")
-        return
-
     # Get current time + 24 hours
     reminder_threshold = datetime.now(TIMEZONE) + timedelta(hours=24)
 
@@ -511,6 +508,17 @@ async def check_reminders():
 
     for poll in polls:
         try:
+            # Resolve channel: use the stored per-poll channel_id, fall back to
+            # first configured channel for polls created before the migration.
+            poll_channel_id = poll.get('channel_id') or (CHANNEL_IDS[0] if CHANNEL_IDS else None)
+            if not poll_channel_id:
+                print(f"No channel found for poll {poll['id']}, skipping reminder")
+                continue
+            channel = bot.get_channel(poll_channel_id)
+            if not channel:
+                print(f"Could not find channel {poll_channel_id} for poll {poll['id']}, skipping reminder")
+                continue
+
             # Fetch the poll message
             message = await channel.fetch_message(poll['message_id'])
 
@@ -554,15 +562,6 @@ async def check_game_time_changes():
     """Check every 2 hours for game time changes"""
     await bot.wait_until_ready()
 
-    if not CHANNEL_IDS:
-        print("ERROR: CHANNEL_IDS is not configured. Please set the CHANNEL_IDS environment variable.")
-        return
-
-    channel = bot.get_channel(CHANNEL_IDS[0])
-    if not channel:
-        print(f"Could not find channel with ID {CHANNEL_IDS[0]}")
-        return
-
     # Drive from the calendar (source of truth) so we catch games rescheduled
     # from a past date to a future one — those drop out of get_active_polls()
     # because the stored game_time is in the past.
@@ -574,6 +573,15 @@ async def check_game_time_changes():
                 continue
 
             try:
+                # Resolve channel per poll (same fallback logic as check_reminders)
+                poll_channel_id = poll.get('channel_id') or (CHANNEL_IDS[0] if CHANNEL_IDS else None)
+                if not poll_channel_id:
+                    print(f"No channel found for poll {poll['id']}, skipping time-change check")
+                    continue
+                channel = bot.get_channel(poll_channel_id)
+                if not channel:
+                    print(f"Could not find channel {poll_channel_id} for poll {poll['id']}, skipping")
+                    continue
                 stored_time = datetime.fromisoformat(poll['game_time'])
                 new_time = game['start_time']
 

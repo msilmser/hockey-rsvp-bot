@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, date
+from datetime import datetime, date, timedelta, timezone
 from unittest.mock import AsyncMock, patch, MagicMock
 from icalendar import Calendar, Event
 import pytz
@@ -8,27 +8,37 @@ from ical_parser import ICalParser
 
 TIMEZONE = pytz.timezone('America/Toronto')
 
-SAMPLE_ICAL = b"""BEGIN:VCALENDAR
+# Build SAMPLE_ICAL with dates relative to now so the test window never goes
+# stale.  game1 = 30 days out, game2 = 37 days out — both safely inside the
+# days=365 window used in the tests.
+_now = datetime.now(timezone.utc)
+_fmt = '%Y%m%dT%H%M%SZ'
+_g1_start = (_now + timedelta(days=30)).strftime(_fmt)
+_g1_end   = (_now + timedelta(days=30, hours=2)).strftime(_fmt)
+_g2_start = (_now + timedelta(days=37)).strftime(_fmt)
+_g2_end   = (_now + timedelta(days=37, hours=2)).strftime(_fmt)
+
+SAMPLE_ICAL = f"""BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//Test//Test//EN
 BEGIN:VEVENT
-DTSTART:20260425T230000Z
-DTEND:20260426T010000Z
+DTSTART:{_g1_start}
+DTEND:{_g1_end}
 SUMMARY:Rivals FC @ Mighty Pucks
 LOCATION:Test Arena
 DESCRIPTION:Game night
 UID:game-home-001@test.com
 END:VEVENT
 BEGIN:VEVENT
-DTSTART:20260430T230000Z
-DTEND:20260501T010000Z
+DTSTART:{_g2_start}
+DTEND:{_g2_end}
 SUMMARY:Mighty Pucks @ Ice Kings
 LOCATION:Away Arena
 DESCRIPTION:Away game
 UID:game-away-001@test.com
 END:VEVENT
 END:VCALENDAR
-"""
+""".encode()
 
 
 @pytest.fixture

@@ -34,6 +34,16 @@ class Database:
                 # Column already exists, ignore
                 pass
 
+            # Add channel_id column if it doesn't exist (for existing databases)
+            # Stores which Discord channel the poll was posted in so reminders/
+            # time-change notifications go to the correct per-team channel.
+            try:
+                await db.execute('ALTER TABLE polls ADD COLUMN channel_id INTEGER')
+                await db.commit()
+            except Exception:
+                # Column already exists, ignore
+                pass
+
             # RSVPs table - tracks user responses
             await db.execute('''
                 CREATE TABLE IF NOT EXISTS rsvps (
@@ -62,12 +72,12 @@ class Database:
 
             await db.commit()
 
-    async def create_poll(self, game_id, message_id, game_time):
+    async def create_poll(self, game_id, message_id, game_time, channel_id=None):
         """Create a new poll record"""
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
-                'INSERT INTO polls (game_id, message_id, game_time) VALUES (?, ?, ?)',
-                (game_id, message_id, game_time.isoformat())
+                'INSERT INTO polls (game_id, message_id, game_time, channel_id) VALUES (?, ?, ?, ?)',
+                (game_id, message_id, game_time.isoformat(), channel_id)
             )
             await db.commit()
 
