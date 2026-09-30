@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import re
 import requests
 from icalendar import Calendar
 from datetime import datetime, timedelta
@@ -101,7 +102,7 @@ class ICalParser:
             summary = str(event.get('SUMMARY', ''))
             location = str(event.get('LOCATION', 'TBD'))
             description = str(event.get('DESCRIPTION', ''))
-            uid = str(event.get('UID', ''))
+            uid = self._normalize_uid(str(event.get('UID', '')))
 
             # Try to extract opponent from summary
             opponent = self._extract_opponent(summary)
@@ -121,6 +122,18 @@ class ICalParser:
         except Exception as e:
             print(f"Error parsing event: {e}")
             return None
+
+    def _normalize_uid(self, uid):
+        """Strip GameSheet's volatile generation-timestamp prefix from the UID.
+
+        GameSheet re-stamps a "YYYYMMDDTHHMMSS-" prefix onto the UID every time
+        the feed is exported, so the same game gets a different UID on every
+        fetch (e.g. "20260928T180418-3013919@gamesheetinc.com" one day and
+        "20260929T180419-3013919@gamesheetinc.com" the next). That broke poll
+        dedup and created duplicate RSVP polls for the same game. The numeric
+        id after the dash is the stable part, so keep only that.
+        """
+        return re.sub(r'^\d{8}T\d{6}-(?=\d+@gamesheetinc\.com$)', '', uid)
 
     def _extract_opponent(self, summary):
         """Extract opponent team name from the game summary (format: AWAY @ HOME)"""
